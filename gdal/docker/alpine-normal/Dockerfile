@@ -251,6 +251,16 @@ RUN if test "${SPATIALITE_VERSION}" != ""; then ( \
         mkdir -p /build_spatialite/usr/lib; \
     fi
 
+# Build filegdb
+ENV FGDB_SOURCE https://raw.githubusercontent.com/Esri/file-geodatabase-api/master/FileGDB_API_1.5/FileGDB_API_1_5_64gcc51.tar.gz
+RUN wget -q ${FGDB_SOURCE} -O filgdb_api.tar.gz && \
+	tar -xzvf filgdb_api.tar.gz -C /usr/local && \
+    rm /usr/local/FileGDB_API-64gcc51/lib/libstdc++.so.6 && \
+    ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/local/FileGDB_API-64gcc51/lib/libstdc++.so.6
+ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/usr/local/FileGDB_API-64gcc51/lib"
+
+
+
 # Build GDAL
 ARG GDAL_VERSION=master
 ARG GDAL_RELEASE_DATE
@@ -307,6 +317,7 @@ RUN if test "${GDAL_VERSION}" = "master"; then \
     && ./configure --prefix=/usr --without-libtool \
     --with-hide-internal-symbols \
     --with-proj=/usr \
+	--with-fgdb=/usr/local/FileGDB_API-64gcc51 \
     --with-libtiff=internal --with-rename-internal-libtiff-symbols \
     --with-geotiff=internal --with-rename-internal-libgeotiff-symbols \
     # --enable-lto
