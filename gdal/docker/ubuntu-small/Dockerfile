@@ -62,6 +62,17 @@ RUN apt-get update -y \
     && apt-get install -y --fix-missing --no-install-recommends rsync ccache
 ARG RSYNC_REMOTE
 
+# filegdb
+RUN wget https://github.com/Esri/file-geodatabase-api/raw/master/FileGDB_API_1.5/FileGDB_API_1_5_64gcc51.tar.gz -O - \
+     | tar xz -C /usr/local \
+    && ls /usr/local \
+    && echo "/usr/local/FileGDB_API-64gcc51/lib" >> /etc/ld.so.conf \
+	&& cd /usr/local/FileGDB_API-64gcc51/lib && rm libstdc++.so libstdc++.so.6 libstdc++.so.6.0.21 && ls -a 
+ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/usr/local/FileGDB_API-64gcc51/lib"
+RUN ldconfig
+RUN cd /usr/local/FileGDB_API-64gcc51/samples && ls -a && make clean && make
+RUN	cp -r ../lib/* /usr/local/lib
+
 # Build PROJ
 ARG PROJ_VERSION=master
 RUN mkdir proj \
@@ -76,7 +87,7 @@ RUN mkdir proj \
         export CC="ccache gcc"; \
         export CXX="ccache g++"; \
         export PROJ_DB_CACHE_DIR="$HOME/.ccache"; \
-        ccache -M 100M; \
+        ccache -M 6G; \
     fi \
     && CFLAGS='-DPROJ_RENAME_SYMBOLS -O2' CXXFLAGS='-DPROJ_RENAME_SYMBOLS -DPROJ_INTERNAL_CPP_NAMESPACE -O2' \
         ./configure --prefix=${PROJ_INSTALL_PREFIX} --disable-static \
@@ -129,12 +140,13 @@ RUN if test "${GDAL_VERSION}" = "master"; then \
         chmod +x ccache_g++.sh; \
         export CC=$PWD/ccache_gcc.sh; \
         export CXX=$PWD/ccache_g++.sh; \
-        ccache -M 1G; \
+        ccache -M 6G; \
     fi \
     && ./configure --prefix=/usr --without-libtool \
     --with-hide-internal-symbols \
     --with-jpeg12 \
     --with-python \
+	--with-fgdb=/usr/local/FileGDB_API-64gcc51 \
     --with-webp --with-proj=/build${PROJ_INSTALL_PREFIX} \
     --with-libtiff=internal --with-rename-internal-libtiff-symbols \
     --with-geotiff=internal --with-rename-internal-libgeotiff-symbols \
@@ -204,4 +216,7 @@ COPY --from=builder  /build/usr/include/ /usr/include/
 COPY --from=builder  /build_gdal_python/usr/ /usr/
 COPY --from=builder  /build_gdal_version_changing/usr/ /usr/
 
-RUN ldconfig
+COPY --from=builder  /usr/local/FileGDB_API-64gcc51/lib /usr/local/FileGDB_API-64gcc51/lib
+ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/usr/local/FileGDB_API-64gcc51/lib"
+
+RUN ldconfig -v
