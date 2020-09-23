@@ -62,17 +62,6 @@ RUN apt-get update -y \
     && apt-get install -y --fix-missing --no-install-recommends rsync ccache
 ARG RSYNC_REMOTE
 
-# filegdb
-RUN wget https://github.com/Esri/file-geodatabase-api/raw/master/FileGDB_API_1.5/FileGDB_API_1_5_64gcc51.tar.gz -O - \
-     | tar xz -C /usr/local \
-    && ls /usr/local \
-    && echo "/usr/local/FileGDB_API-64gcc51/lib" >> /etc/ld.so.conf \
-	&& cd /usr/local/FileGDB_API-64gcc51/lib && rm libstdc++.so libstdc++.so.6 libstdc++.so.6.0.21 && ls -a 
-ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/usr/local/FileGDB_API-64gcc51/lib"
-RUN ldconfig
-RUN cd /usr/local/FileGDB_API-64gcc51/samples && ls -a && make clean && make
-RUN	cp -r ../lib/* /usr/local/lib
-
 # Build PROJ
 ARG PROJ_VERSION=master
 RUN mkdir proj \
@@ -113,6 +102,17 @@ RUN mkdir proj \
     && ln -s libinternalproj.so.${PROJ_SO} /build${PROJ_INSTALL_PREFIX}/lib/libproj.so.${PROJ_SO_FIRST} \
     && strip -s /build${PROJ_INSTALL_PREFIX}/lib/libinternalproj.so.${PROJ_SO} \
     && for i in /build${PROJ_INSTALL_PREFIX}/bin/*; do strip -s $i 2>/dev/null || /bin/true; done
+
+# filegdb
+RUN wget https://github.com/Esri/file-geodatabase-api/raw/master/FileGDB_API_1.5.1/FileGDB_API_1_5_1-64gcc51.tar.gz -O - \
+     | tar xz -C /usr/local \
+    && ls /usr/local \
+    && echo "/usr/local/FileGDB_API-64gcc51/lib" >> /etc/ld.so.conf \
+	&& cd /usr/local/FileGDB_API-64gcc51/lib && rm libstdc++.so libstdc++.so.6 libstdc++.so.6.0.21 && ls -a 
+ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/usr/local/FileGDB_API-64gcc51/lib"
+RUN ldconfig
+RUN cd /usr/local/FileGDB_API-64gcc51/samples && ls -a && make clean && make
+RUN	cp -r ../lib/* /usr/local/lib
 
 # Build GDAL
 ARG GDAL_VERSION=master
