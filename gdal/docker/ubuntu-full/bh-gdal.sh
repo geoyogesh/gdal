@@ -2,7 +2,7 @@
 set -eu
 
 if [ "${GDAL_VERSION}" = "master" ]; then
-    GDAL_VERSION=$(curl -Ls https://api.github.com/repos/OSGeo/gdal/commits/HEAD -H "Accept: application/vnd.github.VERSION.sha")
+    GDAL_VERSION=$(curl -Ls https://api.github.com/repos/${GDAL_REPOSITORY}/commits/HEAD -H "Accept: application/vnd.github.VERSION.sha")
     export GDAL_VERSION
     GDAL_RELEASE_DATE=$(date "+%Y%m%d")
     export GDAL_RELEASE_DATE
@@ -13,8 +13,10 @@ if [ -z "${GDAL_BUILD_IS_RELEASE:-}" ]; then
 fi
 
 mkdir gdal
-wget -q "https://github.com/OSGeo/gdal/archive/${GDAL_VERSION}.tar.gz" \
+wget -q "https://github.com/${GDAL_REPOSITORY}/archive/${GDAL_VERSION}.tar.gz" \
     -O - | tar xz -C gdal --strip-components=1
+
+
 
 (
     cd gdal/gdal
@@ -34,31 +36,48 @@ wget -q "https://github.com/OSGeo/gdal/archive/${GDAL_VERSION}.tar.gz" \
         ccache -M 1G
     fi
 
-    ./configure --prefix=/usr \
-        --without-libtool \
-        --with-hide-internal-symbols \
-        --with-jpeg12 \
-        --with-python \
-        --with-poppler \
-        --with-spatialite \
-        --with-mysql \
-        --with-liblzma \
-        --with-webp \
-        --with-epsilon \
-        --with-proj="/build${PROJ_INSTALL_PREFIX-/usr/local}" \
-        --with-poppler \
-        --with-hdf5 \
-        --with-dods-root=/usr \
-        --with-sosi \
-        --with-libtiff=internal --with-rename-internal-libtiff-symbols \
-        --with-geotiff=internal --with-rename-internal-libgeotiff-symbols \
-        --with-kea=/usr/bin/kea-config \
-        --with-mongocxxv3 \
-        --with-tiledb \
-        --with-crypto
+    GDAL_CONFIG_OPTS=""
+
+    if echo "$WITH_FILEGDB" | grep -Eiq "^(y(es)?|1|true)$" ; then
+      GDAL_CONFIG_OPTS="$GDAL_CONFIG_OPTS  --with-fgdb=/usr/local/FileGDB_API "
+    fi
+
+    if echo "$WITH_PDFIUM" | grep -Eiq "^(y(es)?|1|true)$" ; then
+      GDAL_CONFIG_OPTS="$GDAL_CONFIG_OPTS  --with-pdfium=/usr "
+    fi
+
+    LDFLAGS="-L/build${PROJ_INSTALL_PREFIX-/usr/local}/lib -linternalproj" ./configure --prefix=/usr \
+    --without-libtool \
+    --with-hide-internal-symbols \
+    --with-jpeg12 \
+    --with-python \
+    --with-poppler \
+    --with-spatialite \
+    --with-mysql \
+    --with-liblzma \
+    --with-webp \
+    --with-epsilon \
+    --with-proj="/build${PROJ_INSTALL_PREFIX-/usr/local}" \
+    --with-poppler \
+    --with-hdf5 \
+    --with-dods-root=/usr \
+    --with-sosi \
+    --with-libtiff=internal --with-rename-internal-libtiff-symbols \
+    --with-geotiff=internal --with-rename-internal-libgeotiff-symbols \
+    --with-kea=/usr/bin/kea-config \
+    --with-mongocxxv3 \
+    --with-tiledb \
+    --with-crypto \
+    --with-java=/usr/lib/jvm/java-"$JAVA_VERSION"-openjdk-amd64 --with-jvm-lib=/usr/lib/jvm/java-"$JAVA_VERSION"-openjdk-amd64/lib/server --with-jvm-lib-add-rpath \
+    --with-mdb $GDAL_CONFIG_OPTS
 
     make "-j$(nproc)"
     make install DESTDIR="/build"
+
+    cd swig/java
+    make "-j$(nproc)"
+    make install DESTDIR="/build"
+    cd ../../
 
     if [ -n "${RSYNC_REMOTE:-}" ]; then
         ccache -s

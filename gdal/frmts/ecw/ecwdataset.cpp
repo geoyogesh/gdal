@@ -2106,7 +2106,7 @@ CPLErr ECWDataset::IRasterIO( GDALRWFlag eRWFlag,
     {
         // This is tricky, because it expects the rest of the image
         // with this buffer width to be read. The preferred way to
-        // achieve this behaviour would be to call AdviseRead before
+        // achieve this behavior would be to call AdviseRead before
         // call IRasterIO.  The logic could be improved to detect
         // successive pattern of single line reading before doing an
         // AdviseRead.
@@ -3117,7 +3117,7 @@ void ECWDataset::ECW2WKTProjection()
         /* have "Upward" orientation (Y coordinates increase "Upward"). */
         /* Setting ECW_ALWAYS_UPWARD=FALSE option relexes that policy   */
         /* and makes the driver rely on the actual Y-resolution         */
-        /* value (sign) of an image. This allows to correctly process   */
+        /* value (sign) of an image. This allows correctly processing   */
         /* rare images with "Downward" orientation, where Y coordinates */
         /* increase "Downward" and Y-resolution is positive.            */
         if( CPLTestBool( CPLGetConfigOption("ECW_ALWAYS_UPWARD","TRUE") ) )
@@ -3143,7 +3143,7 @@ void ECWDataset::ECW2WKTProjection()
 /* -------------------------------------------------------------------- */
     OGRSpatialReference oSRS;
 
-    /* For backward-compatible with previous behaviour. Should we only */
+    /* For backward-compatible with previous behavior. Should we only */
     /* restrict to those 2 values ? */
     if (psFileInfo->eCellSizeUnits != ECW_CELL_UNITS_METERS &&
         psFileInfo->eCellSizeUnits != ECW_CELL_UNITS_FEET)
@@ -3419,7 +3419,7 @@ void ECWInitialize()
     /*      Version 3.x and 4.x of the ECWJP2 SDK did not resolve datum and */
     /*      projection to EPSG code using internal mapping.                 */
     /*      Version 5.x do so we provide means to achieve old               */
-    /*      behaviour.                                                      */
+    /*      behavior.                                                      */
     /* -------------------------------------------------------------------- */
     #if ECWSDK_VERSION >= 50
     if( CPLTestBool( CPLGetConfigOption("ECW_DO_NOT_RESOLVE_DATUM_PROJECTION","NO") ) == TRUE)
@@ -3521,6 +3521,80 @@ static void GDALDeregister_ECW( GDALDriver * )
     }
 }
 
+#if ECWSDK_VERSION < 40
+namespace{
+NCSError NCS_CALL EcwFileOpenForReadACB(char *szFileName, void **ppClientData)
+{
+    *ppClientData = VSIFOpenL(szFileName, "rb");
+    if(*ppClientData == nullptr)
+    {
+        return NCS_FILE_OPEN_FAILED;
+    }
+    else
+    {
+        return NCS_SUCCESS;
+    }
+}
+
+NCSError NCS_CALL EcwFileOpenForReadWCB(wchar_t *wszFileName, void **ppClientData)
+{
+    char* szFileName = CPLRecodeFromWChar( wszFileName, CPL_ENC_UCS2, CPL_ENC_UTF8);
+    *ppClientData = VSIFOpenL(szFileName, "rb");
+    CPLFree( szFileName );
+    if(*ppClientData == nullptr)
+    {
+        return NCS_FILE_OPEN_FAILED;
+    }
+    else
+    {
+        return NCS_SUCCESS;
+    }
+}
+
+NCSError NCS_CALL EcwFileCloseCB(void *pClientData)
+{
+    if(0 == VSIFCloseL(reinterpret_cast<VSILFILE*>(pClientData)))
+    {
+        return NCS_SUCCESS;
+    }
+    else
+    {
+        return NCS_FILE_CLOSE_ERROR;
+    }
+}
+
+NCSError NCS_CALL EcwFileReadCB(void *pClientData, void *pBuffer, UINT32 nLength)
+{
+    if(nLength == VSIFReadL(pBuffer, 1, nLength ,reinterpret_cast<VSILFILE*>(pClientData)))
+    {
+        return NCS_SUCCESS;
+    }
+    else
+    {
+        return NCS_FILE_IO_ERROR;
+    }
+}
+
+NCSError NCS_CALL EcwFileSeekCB(void *pClientData, UINT64 nOffset)
+{
+    if(0 == VSIFSeekL(reinterpret_cast<VSILFILE*>(pClientData), nOffset, SEEK_SET))
+    {
+        return NCS_SUCCESS;
+    }
+    else
+    {
+        return NCS_FILE_SEEK_ERROR;
+    }
+}
+
+NCSError NCS_CALL EcwFileTellCB(void *pClientData, UINT64 *pOffset)
+{
+    *pOffset = VSIFTellL(reinterpret_cast<VSILFILE*>(pClientData));
+    return NCS_SUCCESS;
+}
+}//namespace
+#endif // ECWSDK_VERSION < 40
+
 /************************************************************************/
 /*                          GDALRegister_ECW()                          */
 /************************************************************************/
@@ -3539,7 +3613,11 @@ void GDALRegister_ECW()
 
     if( GDALGetDriverByName( "ECW" ) != nullptr )
         return;
-
+#if ECWSDK_VERSION < 40
+    CNCSJPCFileIOStream::SetIOCallbacks(EcwFileOpenForReadACB, EcwFileOpenForReadWCB,
+                                        EcwFileCloseCB, EcwFileReadCB,
+                                        EcwFileSeekCB, EcwFileTellCB);
+#endif // ECWSDK_VERSION < 40
     GDALDriver *poDriver = new GDALDriver();
 
     poDriver->SetDescription( "ECW" );

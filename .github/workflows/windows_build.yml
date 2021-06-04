@@ -1,6 +1,13 @@
 name: Windows builds
 
-on: [push, pull_request]
+on:
+    push:
+        paths-ignore:
+            - 'gdal/doc/**'
+    pull_request:
+        paths-ignore:
+            - 'gdal/doc/**'
+
 
 jobs:
 
@@ -16,7 +23,10 @@ jobs:
             SDK: release-1911 # gisinternals SDK version still to 2017
             MSVC_VER: 1920
             platform: x86
-            PROJ_BRANCH: "7.0"
+            PROJ_BRANCH: "7.2"
+            LIBWEBP_URL: "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.0.3-windows-x86.zip"
+            LIBZSTD_URL: "https://github.com/facebook/zstd/releases/download/v1.4.5/zstd-v1.4.5-win32.zip"
+            LIBDEFLATE_URL: "https://github.com/ebiggers/libdeflate/releases/download/v1.6/libdeflate-1.6-windows-i686-bin.zip"
 
     env:
         VS_VERSION: ${{ matrix.VS_VERSION }}
@@ -25,6 +35,9 @@ jobs:
         MSVC_VER: ${{ matrix.MSVC_VER }}
         platform: ${{ matrix.platform }}
         PROJ_BRANCH: "${{ matrix.PROJ_BRANCH }}"
+        LIBWEBP_URL: "${{ matrix.LIBWEBP_URL }}"
+        LIBZSTD_URL: "${{ matrix.LIBZSTD_URL }}"
+        LIBDEFLATE_URL: "${{ matrix.LIBDEFLATE_URL }}"
         APPVEYOR: true # to skip some tests
         PYTHON_VERSION: "3.7.9"
 
@@ -55,19 +68,32 @@ jobs:
                 $env:WIN64_ARG="WIN64=YES"
                 $env:CMAKE_ARCHITECTURE="x64"
             }
-            echo "::set-env name=PATH::$env:PATH"
-            echo "::set-env name=ARCHITECTURE::$env:ARCHITECTURE"
-            echo "::set-env name=WIN64_ARG::$env:WIN64_ARG"
-            echo "::set-env name=CMAKE_ARCHITECTURE::$env:CMAKE_ARCHITECTURE"
+            echo "PATH=$env:PATH" >> $env:GITHUB_ENV
+            echo "ARCHITECTURE=$env:ARCHITECTURE" >> $env:GITHUB_ENV
+            echo "WIN64_ARG=$env:WIN64_ARG" >> $env:GITHUB_ENV
+            echo "CMAKE_ARCHITECTURE=$env:CMAKE_ARCHITECTURE" >> $env:GITHUB_ENV
 
       - name: Set compiler environment
         shell: cmd
         run: |
             if "%VS_VER%" == "2019" CALL "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=%ARCHITECTURE%
-            echo ::set-env name=PATH::%PATH%
-            echo ::set-env name=INCLUDE::%INCLUDE%
-            echo ::set-env name=LIB::%LIB%
-            echo ::set-env name=LIBPATH::%LIBPATH%
+            echo PATH=%PATH%>> %GITHUB_ENV%
+            echo INCLUDE=%INCLUDE%>> %GITHUB_ENV%
+            echo LIB=%LIB%>> %GITHUB_ENV%
+            echo LIBPATH=%LIBPATH%>> %GITHUB_ENV%
+
+      - name: Detect AVX2
+        shell: bash
+        run: |
+            set -e
+            cl .github/workflows/detect-avx2.c
+            if ./detect-avx2.exe; then
+                    echo "AVX2 available on CPU"
+                    echo "ARCH_FLAGS=/arch:AVX2" >> $GITHUB_ENV
+            else
+                    echo "AVX2 not available on CPU."
+                    echo "ARCH_FLAGS=" >> $GITHUB_ENV
+            fi
 
       - name: Build
         shell: pwsh
@@ -79,6 +105,7 @@ jobs:
                 & $ScriptBlock 2>&1 | ForEach-Object -Process { "$_" }
                 if ($LastExitCode -ne 0) { exit $LastExitCode }
             }
+            echo "ARCH_FLAGS = $env:ARCH_FLAGS"
             exec { git clone --depth=1 -b $env:PROJ_BRANCH https://github.com/OSGeo/PROJ proj }
             Import-PackageProvider NuGet -Force
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
@@ -99,10 +126,21 @@ jobs:
             if(-Not (Test-Path -Path downloads)) { mkdir downloads }
             cd downloads
             if(-Not (Test-Path -Path $env:SDK_ZIP )) { Invoke-WebRequest "$env:SDK_URL" -OutFile "$env:SDK_ZIP" }
+            $env:LIBZSTD_ZIP="libzstd.zip"
+            if(-Not (Test-Path -Path $env:LIBZSTD_ZIP -PathType Leaf)) { Invoke-WebRequest "$env:LIBZSTD_URL" -OutFile "$env:LIBZSTD_ZIP" }
+            $env:LIBWEBP_ZIP="libwebp.zip"
+            if(-Not (Test-Path -Path $env:LIBWEBP_ZIP -PathType Leaf)) { Invoke-WebRequest "$env:LIBWEBP_URL" -OutFile "$env:LIBWEBP_ZIP" }
+            $env:LIBDEFLATE_ZIP="libdeflate.zip"
+            if(-Not (Test-Path -Path $env:LIBDEFLATE_ZIP -PathType Leaf)) { Invoke-WebRequest "$env:LIBDEFLATE_URL" -OutFile "$env:LIBDEFLATE_ZIP" }
             cd ..
             mkdir sdk
             cd sdk
             exec { 7z x ..\downloads\$env:SDK_ZIP }
+            cd $env:SDK
+            #exec { 7z x ..\..\downloads\$env:LIBZSTD_ZIP }
+            exec { 7z x ..\..\downloads\$env:LIBWEBP_ZIP }
+            exec { 7z x -y ..\..\downloads\$env:LIBDEFLATE_ZIP }
+            cd ..
             $env:SDK_PREFIX="$env:GITHUB_WORKSPACE\sdk\$env:SDK"
             $env:SDK_INC="$env:SDK_PREFIX\include"
             $env:SDK_LIB="$env:SDK_PREFIX\lib"
@@ -149,8 +187,17 @@ jobs:
             $env:NMAKE_LOCAL+="NETCDF_LIB=`$(SDK_LIB)\netcdf.lib`n"
             $env:NMAKE_LOCAL+="NETCDF_INC_DIR=`$(SDK_INC)`n"
             $env:NMAKE_LOCAL+="NETCDF_HAS_NC4 = yes`n"
+            #$env:NMAKE_LOCAL+="NETCDF_HAS_NETCDF_MEM = yes`n"
             $env:NMAKE_LOCAL+="PROJ_INCLUDE=-I$env:GITHUB_WORKSPACE\install-proj\include`n"
             $env:NMAKE_LOCAL+="PROJ_LIBRARY=$env:GITHUB_WORKSPACE\install-proj\lib\proj.lib`n"
+            # For some reason libzstd.dll and libdeflate.dll conflicts at runtime
+            #$env:NMAKE_LOCAL+="ZSTD_CFLAGS = -I`$(SDK_PREFIX)\include`n"
+            #$env:NMAKE_LOCAL+="ZSTD_LIBS = `$(SDK_PREFIX)\dll\libzstd.dll.a`n"
+            $env:NMAKE_LOCAL+="WEBP_ENABLED=YES`n"
+            $env:NMAKE_LOCAL+="WEBP_CFLAGS = -I`$(SDK_PREFIX)\libwebp-1.0.3-windows-x86\include`n"
+            $env:NMAKE_LOCAL+="WEBP_LIBS = /NODEFAULTLIB:libcmt.lib `$(SDK_PREFIX)\libwebp-1.0.3-windows-x86\lib\libwebp.lib`n"
+            $env:NMAKE_LOCAL+="LIBDEFLATE_CFLAGS = -I`$(SDK_PREFIX)`n"
+            $env:NMAKE_LOCAL+="LIBDEFLATE_LIB = `$(SDK_PREFIX)\libdeflate.lib`n"
             $env:NMAKE_LOCAL | Set-Content "$env:GITHUB_WORKSPACE\gdal\nmake.local"
             #
             cd $env:GITHUB_WORKSPACE
@@ -168,12 +215,12 @@ jobs:
             cmake -G $env:VS_VERSION -A $env:CMAKE_ARCHITECTURE .. $env:CMAKE_INSTALL_PREFIX -DPROJ_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_LIBPROJ_SHARED=ON -DCMAKE_TOOLCHAIN_FILE=c:/vcpkg/scripts/buildsystems/vcpkg.cmake -DBUILD_SHARED_LIBS=ON -DENABLE_CURL=OFF -DENABLE_TIFF=OFF -DBUILD_PROJSYNC=OFF
             exec { cmake --build . --config Release --target install }
             cd $env:GITHUB_WORKSPACE\install-proj\share\proj
-            Invoke-WebRequest "https://download.osgeo.org/proj/proj-datumgrid-1.8.zip" -OutFile "proj-datumgrid-1.8.zip"
+            Invoke-WebRequest "http://download.osgeo.org/proj/proj-datumgrid-1.8.zip" -OutFile "proj-datumgrid-1.8.zip"
             7z x proj-datumgrid-1.8.zip -aoa
             #
             cd $env:GITHUB_WORKSPACE\gdal
             copy $env:GITHUB_WORKSPACE\install-proj\bin\*.dll .
-            exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS=/WX }
+            exec { nmake /f makefile.vc MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS="/WX $env:ARCH_FLAGS" }
             cd apps
             exec { nmake /f makefile.vc test_ogrsf.exe MSVC_VER=$env:MSVC_VER $env:WIN64_ARG USER_DEFS=/WX }
             $env:DISTUTILS_USE_SDK=1
@@ -182,6 +229,9 @@ jobs:
             exec { python setup.py build }
             exec { python setup.py install }
             cd $env:GITHUB_WORKSPACE\gdal\swig\csharp
+            dotnet nuget locals all --clear
+            dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org
+            dotnet restore
             exec { nmake /f makefile.vc interface }
             exec { nmake /f makefile.vc all $env:WIN64_ARG }
             cd $env:GITHUB_WORKSPACE\autotest\cpp
@@ -199,7 +249,11 @@ jobs:
             }
             $env:SDK_PREFIX="$env:GITHUB_WORKSPACE\sdk\$env:SDK"
             $env:SDK_BIN="$env:SDK_PREFIX\bin"
-            $env:PATH="$env:GITHUB_WORKSPACE\gdal;$env:GITHUB_WORKSPACE\gdal\apps;$env:SDK_BIN;$env:PATH"
+            # Set USE_PATH_FOR_GDAL_PYTHON=YES and include a fake path in the PATH
+            # to test robustness to nonexistent paths (only relevant for python>=3.8)
+            # See https://github.com/OSGeo/gdal/issues/3898
+            $env:USE_PATH_FOR_GDAL_PYTHON="YES"
+            $env:PATH="$env:GITHUB_WORKSPACE\gdal;$env:GITHUB_WORKSPACE\gdal\apps;$env:SDK_PREFIX\dll;$env:SDK_PREFIX;$env:SDK_BIN;$env:GITHUB_WORKSPACE\not_a_real_path;$env:PATH"
             $env:GDAL_DATA="$env:GITHUB_WORKSPACE\gdal\data"
             $env:DO_NOT_FAIL_ON_RECODE_ERRORS="YES"
             # The ca-bundle.crt file which we could point to is invalid in the current SDK

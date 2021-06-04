@@ -31,6 +31,7 @@
 
 
 #include <gdal_priv.h>
+#include <cassert>
 #include <vector>
 #include <algorithm>
 
@@ -222,7 +223,7 @@ CPLErr ECDataset::Initialize(CPLXMLNode* CacheInfo) {
         gt[5] = -res;
         memcpy(GeoTransform, gt, sizeof(gt));
 
-        // Assume symetric coverage, check custom end
+        // Assume symmetric coverage, check custom end
         double maxx = -gt[0];
         double miny = -gt[3];
         const char* pszmaxx = CPLGetXMLValue(TCI, "TileEnd.X", nullptr);
@@ -325,7 +326,17 @@ ECBand::ECBand(ECDataset* parent, int b, int level) : lvl(level), ci(GCI_Undefin
     nBlockXSize = nBlockYSize = 256;
 
     // Default color interpretation
-    ci = (parent->nBands > 2) ? rgba[b - 1] : la[b - 1];
+    assert( b - 1 >= 0 );
+    if( parent->nBands >= 3 )
+    {
+        assert( b - 1 < static_cast<int>(CPL_ARRAYSIZE(rgba)) );
+        ci = rgba[b - 1];
+    }
+    else
+    {
+        assert( b - 1 < static_cast<int>(CPL_ARRAYSIZE(la)) );
+        ci = la[b - 1];
+    }
     if (0 == lvl)
         AddOverviews();
 }
@@ -402,9 +413,9 @@ CPLErr ECBand::IReadBlock(int nBlockXOff, int nBlockYOff, void* pData) {
         }
         if (3 == inbands) {
             // Lacking opacity, copy the first three bands
-            usebands = ubands;
             ubands[1] = 2;
             ubands[2] = 3;
+            usebands = ubands;
         }
         else if (1 == inbands) {
             // Grayscale, expecting color

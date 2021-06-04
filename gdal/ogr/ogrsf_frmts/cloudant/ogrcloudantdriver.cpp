@@ -56,6 +56,9 @@ static GDALDataset* OGRCloudantDriverOpen( GDALOpenInfo* poOpenInfo )
     if( OGRCloudantDriverIdentify(poOpenInfo) == 0 )
         return nullptr;
 
+    if( !GDALIsDriverDeprecatedForGDAL35StillEnabled("CLOUDANT") )
+        return nullptr;
+
     OGRCloudantDataSource   *poDS = new OGRCloudantDataSource();
 
     if( !poDS->Open( poOpenInfo->pszFilename, poOpenInfo->eAccess == GA_Update ) )
@@ -78,6 +81,9 @@ static GDALDataset* OGRCloudantDriverCreate( const char * pszName,
                                             GDALDataType /* eDT */,
                                             char ** /* papszOptions */ )
 {
+    if( !GDALIsDriverDeprecatedForGDAL35StillEnabled("CLOUDANT") )
+        return nullptr;
+
     OGRCloudantDataSource   *poDS = new OGRCloudantDataSource();
 
     if( !poDS->Open( pszName, TRUE ) )
@@ -104,7 +110,7 @@ void RegisterOGRCloudant()
     poDriver->SetDescription( "Cloudant" );
     poDriver->SetMetadataItem( GDAL_DCAP_VECTOR, "YES" );
     poDriver->SetMetadataItem( GDAL_DMD_LONGNAME, "Cloudant / CouchDB" );
-    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drv_cloudant.html" );
+    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drivers/vector/cloudant.html" );
     poDriver->SetMetadataItem( GDAL_DMD_CONNECTION_PREFIX, "Cloudant:" );
     poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST,
                                "<CreationOptionList/>");

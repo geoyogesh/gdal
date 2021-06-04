@@ -74,8 +74,8 @@ ________________________
 -  As defined in the standard conf.xml file, the cache tile grid
    has an origin location, stored in the
    **CacheInfo.TileCacheInfo.TileOrigin** element, which has X
-   and Y components. The cache size is not explicilty defined.
-   The ESRIC format driver will assume a symetric area around the
+   and Y components. The cache size is not explicitly defined.
+   The ESRIC format driver will assume a symmetric area around the
    0,0 coordinates, in the reference system coordinates. This is
    true for the standard Web Mercator and GCS reference systems.
    If this assumption is not valid, the conf.xml file can be

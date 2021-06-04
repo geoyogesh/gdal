@@ -29,11 +29,7 @@
 # DEALINGS IN THE SOFTWARE.
 ###############################################################################
 
-try:
-    from BaseHTTPServer import BaseHTTPRequestHandler
-except ImportError:
-    from http.server import BaseHTTPRequestHandler
-
+from http.server import BaseHTTPRequestHandler
 import os
 
 import pytest
@@ -115,7 +111,7 @@ def test_ogr_wfs_mapserver():
         feat.DumpReadable()
         pytest.fail('did not get expected feature')
 
-    
+
 
 ###############################################################################
 # Test reading a GeoServer WFS server
@@ -208,7 +204,7 @@ def test_ogr_wfs_geoserver():
             feat.DumpReadable()
             pytest.fail('did not get expected feature (4)')
 
-    
+
 ###############################################################################
 # Test reading a GeoServer WFS server with OUTPUTFORMAT=json
 
@@ -242,7 +238,7 @@ def test_ogr_wfs_geoserver_json():
         feat.DumpReadable()
         pytest.fail('did not get expected feature')
 
-    
+
 
 ###############################################################################
 # Test reading a GeoServer WFS server with OUTPUTFORMAT=SHAPE-ZIP
@@ -276,7 +272,7 @@ def test_ogr_wfs_geoserver_shapezip():
         feat.DumpReadable()
         pytest.fail('did not get expected feature')
 
-    
+
 ###############################################################################
 # Test WFS paging
 
@@ -385,7 +381,7 @@ def test_ogr_wfs_deegree():
     #    gdaltest.post_reason('did not get expected feature count after SetAttributeFilter (2)')
     #    print(feat_count)
     #    return 'fail'
-    
+
 ###############################################################################
 # Run test_ogrsf
 
@@ -619,7 +615,7 @@ def test_ogr_wfs_deegree_wfst():
     if ret != 0:
         print('expected fail on SetFeature')
 
-    
+
 ###############################################################################
 # Test CreateFeature() / UpdateFeature() / DeleteFeature() on a WFS 1.0.0 server
 
@@ -880,7 +876,7 @@ def ogr_wfs_get_multiple_layer_defn(url):
         lyr = ds.GetLayer(i)
         print('Layer %s has %d fields' % (lyr.GetName(), lyr.GetLayerDefn().GetFieldCount()))
 
-    
+
 ###############################################################################
 # Test a ESRI server
 
@@ -1798,7 +1794,7 @@ def test_ogr_wfs_vsimem_wfs110_one_layer_getextent_optimized(with_and_without_st
     for i in range(4):
         assert expected_extent[i] == pytest.approx(got_extent[i], abs=1e-5)
 
-    
+
 ###############################################################################
 
 
@@ -1894,7 +1890,7 @@ xsi:schemaLocation="http://foo /vsimem/wfs_endpoint?SERVICE=WFS&amp;VERSION=1.1.
         f.DumpReadable()
         pytest.fail()
 
-    
+
 ###############################################################################
 
 
@@ -2241,7 +2237,7 @@ xsi:schemaLocation="http://foo /vsimem/wfs_endpoint?SERVICE=WFS&amp;VERSION=1.1.
         f = lyr.GetNextFeature()
         assert f is not None
 
-    
+
 ###############################################################################
 
 
@@ -3088,7 +3084,7 @@ xsi:schemaLocation="http://foo /vsimem/wfs_endpoint?SERVICE=WFS&amp;VERSION=1.1.
         f.DumpReadable()
         pytest.fail()
 
-    
+
 ###############################################################################
 
 
@@ -3522,7 +3518,7 @@ xsi:schemaLocation="http://foo /vsimem/wfs_endpoint?SERVICE=WFS&amp;VERSION=1.1.
     #    print(lyr.GetFeatureCount())
     #    return 'fail'
 
-    
+
 
 ###############################################################################
 def test_ogr_wfs_vsimem_wfs200_json(with_and_without_streaming):
@@ -3655,7 +3651,7 @@ def test_ogr_wfs_vsimem_wfs200_json(with_and_without_streaming):
         f.DumpReadable()
         pytest.fail()
 
-    
+
 
 ###############################################################################
 def test_ogr_wfs_vsimem_wfs200_multipart(with_and_without_streaming):
@@ -3779,7 +3775,7 @@ str,"POINT(2 49)"
         f.DumpReadable()
         pytest.fail()
 
-    
+
 ###############################################################################
 
 
@@ -4500,6 +4496,6 @@ def test_ogr_wfs_vsimem_cleanup(with_and_without_streaming):
     for f in gdal.ReadDir('/vsimem/'):
         gdal.Unlink('/vsimem/' + f)
 
-    
+
 
 

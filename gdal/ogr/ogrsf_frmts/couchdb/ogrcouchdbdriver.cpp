@@ -71,6 +71,12 @@ static GDALDataset* OGRCouchDBDriverOpen( GDALOpenInfo* poOpenInfo )
         poDS = nullptr;
     }
 
+    if( !GDALIsDriverDeprecatedForGDAL35StillEnabled("COUCHDB") )
+    {
+        delete poDS;
+        return nullptr;
+    }
+
     return poDS;
 }
 
@@ -85,6 +91,9 @@ static GDALDataset* OGRCouchDBDriverCreate( const char * pszName,
                                             GDALDataType /* eDT */,
                                             char ** /* papszOptions */ )
 {
+    if( !GDALIsDriverDeprecatedForGDAL35StillEnabled("COUCHDB") )
+        return nullptr;
+
     OGRCouchDBDataSource   *poDS = new OGRCouchDBDataSource();
 
     if( !poDS->Open( pszName, TRUE ) )
@@ -111,7 +120,7 @@ void RegisterOGRCouchDB()
     poDriver->SetDescription( "CouchDB" );
     poDriver->SetMetadataItem( GDAL_DCAP_VECTOR, "YES" );
     poDriver->SetMetadataItem( GDAL_DMD_LONGNAME, "CouchDB / GeoCouch" );
-    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drv_couchdb.html" );
+    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drivers/vector/couchdb.html" );
     poDriver->SetMetadataItem( GDAL_DMD_CONNECTION_PREFIX, "CouchDB:" );
     poDriver->SetMetadataItem( GDAL_DMD_CREATIONOPTIONLIST,
                                "<CreationOptionList/>");

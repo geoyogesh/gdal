@@ -13,6 +13,7 @@ FROM $BASE_IMAGE as builder
 LABEL maintainer="Even Rouault <even.rouault@spatialys.com>"
 
 # Setup build env for PROJ
+USER root
 RUN apt-get update -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --fix-missing --no-install-recommends \
             software-properties-common build-essential ca-certificates \
@@ -21,6 +22,7 @@ RUN apt-get update -y \
             libtiff5-dev \
     && rm -rf /var/lib/apt/lists/*
 
+ARG JAVA_VERSION=11
 # Setup build env for GDAL
 RUN apt-get update -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --fix-missing --no-install-recommends \
@@ -29,18 +31,19 @@ RUN apt-get update -y \
        libpng-dev libjpeg-dev libgif-dev liblzma-dev libgeos-dev \
        curl libxml2-dev libexpat-dev libxerces-c-dev \
        libnetcdf-dev libpoppler-dev libpoppler-private-dev \
-       libspatialite-dev swig libhdf4-alt-dev libhdf5-serial-dev \
+       libspatialite-dev swig ant libhdf4-alt-dev libhdf5-serial-dev \
        libfreexl-dev unixodbc-dev libwebp-dev libepsilon-dev \
        liblcms2-2 libpcre3-dev libcrypto++-dev libdap-dev libfyba-dev \
        libkml-dev libmysqlclient-dev libogdi-dev \
-       libcfitsio-dev openjdk-8-jdk libzstd-dev \
+       libcfitsio-dev openjdk-"$JAVA_VERSION"-jdk libzstd-dev \
        libpq-dev libssl-dev libboost-dev \
        autoconf automake bash-completion libarmadillo-dev \
        libopenexr-dev libheif-dev \
+       libdeflate-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Build likbkea
-ARG KEA_VERSION=1.4.13
+ARG KEA_VERSION=1.4.14
 RUN wget -q https://github.com/ubarsc/kealib/archive/kealib-${KEA_VERSION}.zip \
     && unzip -q kealib-${KEA_VERSION}.zip \
     && rm -f kealib-${KEA_VERSION}.zip \
@@ -57,7 +60,7 @@ RUN wget -q https://github.com/ubarsc/kealib/archive/kealib-${KEA_VERSION}.zip \
     && for i in /build_thirdparty/usr/bin/*; do strip -s $i 2>/dev/null || /bin/true; done
 
 # Build mongo-c-driver
-ARG MONGO_C_DRIVER_VERSION=1.16.2
+ARG MONGO_C_DRIVER_VERSION=1.17.5
 RUN mkdir mongo-c-driver \
     && wget -q https://github.com/mongodb/mongo-c-driver/releases/download/${MONGO_C_DRIVER_VERSION}/mongo-c-driver-${MONGO_C_DRIVER_VERSION}.tar.gz -O - \
         | tar xz -C mongo-c-driver --strip-components=1 \
@@ -75,7 +78,7 @@ RUN mkdir mongo-c-driver \
     && for i in /build_thirdparty/usr/bin/*; do strip -s $i 2>/dev/null || /bin/true; done
 
 # Build mongocxx
-ARG MONGOCXX_VERSION=3.5.0
+ARG MONGOCXX_VERSION=3.6.3
 RUN mkdir mongocxx \
     && wget -q https://github.com/mongodb/mongo-cxx-driver/archive/r${MONGOCXX_VERSION}.tar.gz -O - \
         | tar xz -C mongocxx --strip-components=1 \
@@ -92,7 +95,7 @@ RUN mkdir mongocxx \
     && for i in /build_thirdparty/usr/bin/*; do strip -s $i 2>/dev/null || /bin/true; done
 
 # Build tiledb
-ARG TILEDB_VERSION=2.0.8
+ARG TILEDB_VERSION=2.2.7
 RUN mkdir tiledb \
     && wget -q https://github.com/TileDB-Inc/TileDB/archive/${TILEDB_VERSION}.tar.gz -O - \
         | tar xz -C tiledb --strip-components=1 \
@@ -128,6 +131,45 @@ RUN if test "${OPENJPEG_VERSION}" != ""; then ( \
     && rm -rf openjpeg-${OPENJPEG_VERSION} \
     ); fi
 
+# Install MDB Driver Jars
+RUN wget -q https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/mdb-sqlite/mdb-sqlite-1.0.2.tar.bz2 \
+  && tar -xjf mdb-sqlite-1.0.2.tar.bz2 \
+  && mkdir -p /build/usr/share/java \
+  && cp mdb-sqlite-1.0.2/lib/*.jar /build/usr/share/java \
+  && rm -rf mdb-sqlite-1.0.2.tar.bz2 && rm -rf mdb-sqlite-1.0.2
+
+#Set CLASSPATH so jars are found
+ENV CLASSPATH="/build/usr/share/java/jackcess-1.1.14.jar:/build/usr/share/java/commons-logging-1.1.1.jar:/build/usr/share/java/commons-lang-2.4.jar"
+
+#Build File Geodatabase
+
+ARG WITH_FILEGDB=
+RUN if echo "$WITH_FILEGDB" | grep -Eiq "^(y(es)?|1|true)$"  ; then ( \
+  wget -q https://github.com/Esri/file-geodatabase-api/raw/master/FileGDB_API_1.5.1/FileGDB_API_1_5_1-64gcc51.tar.gz \
+  && tar -xzf FileGDB_API_1_5_1-64gcc51.tar.gz \
+  && chown -R root:root FileGDB_API-64gcc51 \
+  && mv FileGDB_API-64gcc51 /usr/local/FileGDB_API \
+  && rm -rf /usr/local/FileGDB_API/lib/libstdc++* \
+  && cp /usr/local/FileGDB_API/lib/* /build_thirdparty/usr/lib \
+  && cp /usr/local/FileGDB_API/include/* /usr/include \
+  && rm -rf FileGDB_API_1_5_1-64gcc51.tar.gz \
+  ) ; fi
+
+
+ARG WITH_PDFIUM=yes
+RUN if echo "$WITH_PDFIUM" | grep -Eiq "^(y(es)?|1|true)$"  ; then ( \
+  wget -q https://github.com/rouault/pdfium_build_gdal_3_2/releases/download/v1_pdfium_4272/install-ubuntu2004-rev4272.tar.gz \
+  && tar -xzf install-ubuntu2004-rev4272.tar.gz \
+  && chown -R root:root install \
+  && mv install/lib/* /usr/lib/ \
+  && mv install/include/* /usr/include/ \
+  && rm -rf install-ubuntu2004-rev4272.tar.gz install \
+  && apt-get update -y \
+  && apt-get install -y --fix-missing --no-install-recommends liblcms2-dev \
+  && rm -rf /var/lib/apt/lists/* \
+  ) ; fi
+
+
 RUN apt-get update -y \
     && apt-get install -y --fix-missing --no-install-recommends rsync ccache \
     && rm -rf /var/lib/apt/lists/*
@@ -135,24 +177,34 @@ ARG RSYNC_REMOTE
 
 ARG WITH_DEBUG_SYMBOLS=no
 
-# Build PROJ
-ARG PROJ_VERSION=master
+# Refresh grids
+ARG PROJ_DATUMGRID_LATEST_LAST_MODIFIED
 ARG PROJ_INSTALL_PREFIX=/usr/local
 COPY ./bh-proj.sh /buildscripts/bh-proj.sh
+RUN DESTDIR=/build_tmp_proj /buildscripts/bh-proj.sh \
+     && LD_LIBRARY_PATH=/build_tmp_proj/usr/local/lib /build_tmp_proj/usr/local/bin/projsync --target-dir /tmp/proj_grids --all \
+     && rm -rf /build_tmp_proj
+
+# Build PROJ
+ARG PROJ_VERSION=master
 RUN /buildscripts/bh-proj.sh
 
 ARG GDAL_VERSION=master
 ARG GDAL_RELEASE_DATE
 ARG GDAL_BUILD_IS_RELEASE
+ARG GDAL_REPOSITORY=OSGeo/gdal
 
 # Build GDAL
+
 COPY ./bh-gdal.sh /buildscripts/bh-gdal.sh
 RUN /buildscripts/bh-gdal.sh
 
 # Build final image
 FROM $BASE_IMAGE as runner
 
+USER root
 RUN date
+ARG JAVA_VERSION=11
 
 RUN apt-get update \
 # PROJ dependencies
@@ -168,9 +220,10 @@ RUN apt-get update \
         libhdf4-0-alt libhdf5-103 libhdf5-cpp-103 poppler-utils libfreexl1 unixodbc libwebp6 \
         libepsilon1 liblcms2-2 libpcre3 libcrypto++6 libdap25 libdapclient6v5 libfyba0 \
         libkmlbase1 libkmlconvenience1 libkmldom1 libkmlengine1 libkmlregionator1 libkmlxsd1 \
-        libmysqlclient21 libogdi4.1 libcfitsio8 openjdk-8-jre \
+        libmysqlclient21 libogdi4.1 libcfitsio8 openjdk-"$JAVA_VERSION"-jre \
         libzstd1 bash bash-completion libpq5 libssl1.1 \
         libarmadillo9 libpython3.8 libopenexr24 libheif1 \
+        libdeflate0 \
         python-is-python3 \
     # Workaround bug in ogdi packaging
     && ln -s /usr/lib/ogdi/libvrf.so /usr/lib \
@@ -180,18 +233,21 @@ RUN apt-get update \
 
 COPY --from=builder  /build_thirdparty/usr/ /usr/
 
-ARG PROJ_DATUMGRID_LATEST_LAST_MODIFIED
 ARG PROJ_INSTALL_PREFIX=/usr/local
+COPY --from=builder  /tmp/proj_grids/* ${PROJ_INSTALL_PREFIX}/share/proj/
+
 COPY --from=builder  /build${PROJ_INSTALL_PREFIX}/share/proj/ ${PROJ_INSTALL_PREFIX}/share/proj/
 COPY --from=builder  /build${PROJ_INSTALL_PREFIX}/include/ ${PROJ_INSTALL_PREFIX}/include/
 COPY --from=builder  /build${PROJ_INSTALL_PREFIX}/bin/ ${PROJ_INSTALL_PREFIX}/bin/
 COPY --from=builder  /build${PROJ_INSTALL_PREFIX}/lib/ ${PROJ_INSTALL_PREFIX}/lib/
-RUN ldconfig \
-    && projsync --system-directory --all
 
+COPY --from=builder  /build/usr/share/java /usr/share/java
 COPY --from=builder  /build/usr/share/gdal/ /usr/share/gdal/
 COPY --from=builder  /build/usr/include/ /usr/include/
 COPY --from=builder  /build_gdal_python/usr/ /usr/
 COPY --from=builder  /build_gdal_version_changing/usr/ /usr/
 
 RUN ldconfig
+
+#Set CLASSPATH so jars are found
+ENV CLASSPATH="/usr/share/java/jackcess-1.1.14.jar:/usr/share/java/commons-logging-1.1.1.jar:/usr/share/java/commons-lang-2.4.jar"

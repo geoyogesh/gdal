@@ -119,8 +119,9 @@ VSIPluginFilesystemHandler::~VSIPluginFilesystemHandler()
 
 
 VSIVirtualHandle* VSIPluginFilesystemHandler::Open( const char *pszFilename,
-                                                  const char *pszAccess,
-                                                  bool bSetError )
+                                                    const char *pszAccess,
+                                                    bool bSetError,
+                                                    CSLConstList /* papszOptions */ )
 {
     if( !IsValidFilename(pszFilename) )
         return nullptr;
@@ -318,6 +319,15 @@ char ** VSIPluginFilesystemHandler::ReadDirEx( const char * pszDirname, int nMax
         return nullptr;
     if (m_cb->read_dir != nullptr) {
         return m_cb->read_dir(m_cb->pUserData, GetCallbackFilename(pszDirname),nMaxFiles);
+    }
+    return nullptr;
+}
+
+char ** VSIPluginFilesystemHandler::SiblingFiles( const char * pszFilename ) {
+    if( !IsValidFilename(pszFilename) )
+        return nullptr;
+    if (m_cb->sibling_files != nullptr) {
+        return m_cb->sibling_files(m_cb->pUserData, GetCallbackFilename(pszFilename));
     }
     return nullptr;
 }

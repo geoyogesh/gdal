@@ -91,7 +91,8 @@ public:
 
     virtual VSIVirtualHandle *Open( const char *pszFilename,
                                     const char *pszAccess,
-                                    bool bSetError ) = 0;
+                                    bool bSetError,
+                                    CSLConstList papszOptions ) = 0;
     virtual int Stat( const char *pszFilename, VSIStatBufL *pStatBuf, int nFlags) = 0;
     virtual int Unlink( const char *pszFilename )
                       { (void) pszFilename; errno=ENOENT; return -1; }
@@ -105,6 +106,8 @@ public:
                       { (void) pszDirname; return nullptr; }
     virtual char **ReadDirEx( const char *pszDirname, int /* nMaxFiles */ )
                       { return ReadDir(pszDirname); }
+    virtual char **SiblingFiles( const char * /*pszFilename*/ )
+                      { return nullptr; }
     virtual int Rename( const char *oldpath, const char *newpath )
                       { (void) oldpath; (void)newpath; errno=ENOENT; return -1; }
     virtual int IsCaseSensitive( const char* pszFilename )
@@ -131,6 +134,8 @@ public:
                                     CSLConstList papszMetadata,
                                     const char* pszDomain,
                                     CSLConstList papszOptions );
+
+    virtual bool    AbortPendingUploads(const char* /*pszFilename*/) { return true;}
 };
 #endif /* #ifndef DOXYGEN_SKIP */
 
